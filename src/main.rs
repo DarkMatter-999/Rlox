@@ -11,6 +11,9 @@ fn main() {
     } else if args.len() == 2 {
         run_file(args[1].clone());
     } else {
-        run_prompt();
+        match run_prompt() {
+            Err(e) => panic!("Run prompt {}", e),
+            Ok(_) => (),
+        }
     }
 }

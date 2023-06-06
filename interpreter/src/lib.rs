@@ -3,6 +3,11 @@ use std::{
     io::{self, Read, Write},
 };
 
+use scanner::Scanner;
+
+mod scanner;
+mod token;
+
 pub fn run_file(path: String) {
     let mut file = match File::open(path.clone()) {
         Err(e) => panic!("Could not open file {}\n{}", path, e),
@@ -15,7 +20,7 @@ pub fn run_file(path: String) {
         Ok(_) => (),
     }
 
-    println!("{}", code);
+    run(&code);
 }
 
 pub fn run_prompt() -> io::Result<()> {
@@ -28,13 +33,25 @@ pub fn run_prompt() -> io::Result<()> {
         if line.is_empty() || line == "\n" {
             break;
         }
-        run(&line);
+        match run(&line) {
+            Ok(t) => {}
+            Err(e) => {
+                std::process::exit(65);
+            }
+        }
     }
     Ok(())
 }
 
-fn run(code: &str) {
-    todo!();
+fn run(code: &str) -> Result<bool, ()> {
+    let mut scanner = Scanner::new(code.to_string());
+    let tokens = scanner.scan_tokens();
+
+    for token in tokens {
+        println!("{:?}", token);
+    }
+
+    return Ok(true);
 }
 
 #[cfg(test)]
