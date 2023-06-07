@@ -7,6 +7,7 @@ use expr::{Expr, ExprType, *};
 use scanner::Scanner;
 
 mod expr;
+mod parser;
 mod scanner;
 mod token;
 
