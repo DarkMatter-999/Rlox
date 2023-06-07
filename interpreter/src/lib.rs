@@ -3,8 +3,10 @@ use std::{
     io::{self, Read, Write},
 };
 
+use expr::{Expr, ExprType, *};
 use scanner::Scanner;
 
+mod expr;
 mod scanner;
 mod token;
 
@@ -50,6 +52,25 @@ fn run(code: &str) -> Result<bool, ()> {
     for token in tokens {
         println!("{:?}", token);
     }
+
+    let exp = ExprType::binary(
+        Expr {
+            node: ExprType::unary(
+                UnaryOperator::Minus,
+                Expr {
+                    node: ExprType::Literal(Literal::Number(123.0)),
+                },
+            ),
+        },
+        BinaryOperator::Star,
+        Expr {
+            node: ExprType::grouping(Expr {
+                node: ExprType::Literal(Literal::Number(45.67)),
+            }),
+        },
+    );
+
+    println!("{:#?}", exp);
 
     return Ok(true);
 }
