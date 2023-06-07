@@ -1,6 +1,2 @@
-var language = lox;
-12.34;
-var a = 10;
-if a == 10 {
-	print "hello";
-}
+(-1) + 2.0 == 10;
+print 1;

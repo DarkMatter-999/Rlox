@@ -4,7 +4,7 @@ use crate::token::{Literal::*, Token, TokenType, TokenType::*};
 
 pub struct Scanner {
     source: String,
-    tokens: Vec<Token>,
+    pub tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: u32,
@@ -46,7 +46,7 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> &Vec<Token> {
+    pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.at_end() {
             self.start = self.current;
             self.scan_token();
@@ -57,7 +57,7 @@ impl Scanner {
             line: self.line,
         });
 
-        &self.tokens
+        self.tokens.clone()
     }
 
     fn at_end(&self) -> bool {

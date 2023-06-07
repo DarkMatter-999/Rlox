@@ -13,6 +13,10 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
+    pub fn parse(&mut self) -> Expr {
+        return self.expression();
+    }
+
     fn expression(&mut self) -> Expr {
         return self.equality();
     }
@@ -120,30 +124,35 @@ impl Parser {
     fn primary(&mut self) -> Expr {
         match self.peek().token_type {
             TokenType::FALSE => {
+                self.advance();
                 return Expr {
                     node: ExprType::Literal(Literal::False),
                 };
             }
             TokenType::TRUE => {
+                self.advance();
                 return Expr {
                     node: ExprType::Literal(Literal::True),
                 };
             }
             TokenType::NIL => {
+                self.advance();
                 return Expr {
                     node: ExprType::Literal(Literal::None),
                 };
             }
             TokenType::NUMBER => {
+                self.advance();
                 let n = match self.previous().lexeme {
                     token::Literal::Number(n) => n,
-                    _ => panic!("Number not recieved"),
+                    _ => panic!("Number not recieved {:?}", self.previous()),
                 };
                 return Expr {
                     node: ExprType::Literal(Literal::Number(n)),
                 };
             }
             TokenType::STRING => {
+                self.advance();
                 let s = match self.previous().lexeme {
                     token::Literal::StringLit(s) => s,
                     _ => panic!("String not recieved"),
@@ -152,7 +161,18 @@ impl Parser {
                     node: ExprType::Literal(Literal::String(s)),
                 };
             }
-            _ => panic!("Unreachable"),
+            TokenType::LEFT_PAREN => {
+                self.advance();
+                let expr = self.expression();
+                self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression");
+                return Expr {
+                    node: ExprType::grouping(expr),
+                };
+            }
+            _ => {
+                self.error(self.peek(), "Expect expression");
+                panic!("Error");
+            }
         }
     }
 
@@ -192,5 +212,46 @@ impl Parser {
 
     fn previous(&self) -> Token {
         return self.tokens[self.current - 1].clone();
+    }
+
+    fn consume(&mut self, token: TokenType, message: &str) -> Token {
+        if self.check(token) {
+            return self.advance();
+        }
+        self.error(self.peek(), message);
+        return Token {
+            token_type: token,
+            lexeme: token::Literal::None,
+            line: 0,
+        };
+    }
+    fn error(&self, token: Token, message: &str) {
+        if token.token_type == TokenType::EOF {
+            println!("{} at end {}", token.line, message);
+        } else {
+            println!("{} at '{:?}' {}", token.line, token.lexeme, message);
+        }
+    }
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.is_at_end() {
+            if self.previous().token_type == TokenType::SEMICOLON {
+                return;
+            }
+            match self.peek().token_type {
+                TokenType::CLASS
+                | TokenType::FUN
+                | TokenType::VAR
+                | TokenType::FOR
+                | TokenType::IF
+                | TokenType::WHILE
+                | TokenType::PRINT
+                | TokenType::RETURN => return,
+                _ => {}
+            }
+
+            self.advance();
+        }
     }
 }

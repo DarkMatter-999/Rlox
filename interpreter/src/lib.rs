@@ -6,6 +6,8 @@ use std::{
 use expr::{Expr, ExprType, *};
 use scanner::Scanner;
 
+use crate::parser::Parser;
+
 mod expr;
 mod parser;
 mod scanner;
@@ -50,28 +52,14 @@ fn run(code: &str) -> Result<bool, ()> {
     let mut scanner = Scanner::new(code.to_string());
     let tokens = scanner.scan_tokens();
 
-    for token in tokens {
+    for token in &tokens {
         println!("{:?}", token);
     }
 
-    let exp = ExprType::binary(
-        Expr {
-            node: ExprType::unary(
-                UnaryOperator::Minus,
-                Expr {
-                    node: ExprType::Literal(Literal::Number(123.0)),
-                },
-            ),
-        },
-        BinaryOperator::Star,
-        Expr {
-            node: ExprType::grouping(Expr {
-                node: ExprType::Literal(Literal::Number(45.67)),
-            }),
-        },
-    );
+    let mut parser = Parser::new(tokens);
+    let expr = parser.parse();
 
-    println!("{:#?}", exp);
+    println!("{:#?}", expr);
 
     return Ok(true);
 }
