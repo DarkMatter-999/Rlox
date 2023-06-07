@@ -1,4 +1,6 @@
-use crate::token::{Token, TokenType, TokenType::*};
+use std::collections::HashMap;
+
+use crate::token::{Literal::*, Token, TokenType, TokenType::*};
 
 pub struct Scanner {
     source: String,
@@ -6,16 +8,41 @@ pub struct Scanner {
     start: usize,
     current: usize,
     line: u32,
+    keywords: HashMap<&'static str, TokenType>,
+}
+
+fn fill_keywords(keywords: &mut HashMap<&str, TokenType>) {
+    keywords.insert("and", AND);
+    keywords.insert("class", CLASS);
+    keywords.insert("else", ELSE);
+    keywords.insert("false", FALSE);
+    keywords.insert("for", FOR);
+    keywords.insert("fun", FUN);
+    keywords.insert("if", IF);
+    keywords.insert("nil", NIL);
+    keywords.insert("or", OR);
+    keywords.insert("print", PRINT);
+    keywords.insert("return", RETURN);
+    keywords.insert("super", SUPER);
+    keywords.insert("this", THIS);
+    keywords.insert("true", TRUE);
+    keywords.insert("var", VAR);
+    keywords.insert("while", WHILE);
 }
 
 impl Scanner {
     pub fn new(source: String) -> Self {
+        let mut keywords = HashMap::new();
+
+        fill_keywords(&mut keywords);
+
         Scanner {
             source: source,
             tokens: Vec::new(),
             start: 0,
             current: 0,
             line: 1,
+            keywords,
         }
     }
 
@@ -26,7 +53,7 @@ impl Scanner {
         }
         self.tokens.push(Token {
             token_type: TokenType::EOF,
-            lexeme: "".to_string(),
+            lexeme: None,
             line: self.line,
         });
 
@@ -97,7 +124,8 @@ impl Scanner {
                 self.line += 1;
             }
             '"' => self.string(),
-
+            '0'..='9' => self.number(),
+            'a'..='z' | 'A'..='Z' => self.identifier(),
             _ => panic!("invalid token recieved '{}'", c),
         };
     }
@@ -108,11 +136,9 @@ impl Scanner {
     }
 
     fn add_token(&mut self, token: TokenType) {
-        let text = &self.source[self.start..self.current];
-
         self.tokens.push(Token {
             token_type: token,
-            lexeme: text.to_string(),
+            lexeme: None,
             line: self.line,
         });
     }
@@ -120,7 +146,15 @@ impl Scanner {
     fn add_token_str(&mut self, text: String) {
         self.tokens.push(Token {
             token_type: STRING,
-            lexeme: text,
+            lexeme: StringLit(text),
+            line: self.line,
+        });
+    }
+
+    fn add_token_num(&mut self, n: f64) {
+        self.tokens.push(Token {
+            token_type: NUMBER,
+            lexeme: Number(n),
             line: self.line,
         });
     }
@@ -144,6 +178,13 @@ impl Scanner {
         }
     }
 
+    fn peek_next(&self) -> char {
+        if self.current + 1 >= self.source.len() {
+            return '\0';
+        }
+        return self.source.chars().nth(self.current + 1).unwrap();
+    }
+
     fn string(&mut self) {
         while self.peek() != '"' && !self.at_end() {
             if self.peek() == '\n' {
@@ -160,5 +201,36 @@ impl Scanner {
 
         let s = &self.source[self.start + 1..self.current - 1];
         self.add_token_str(s.to_string());
+    }
+
+    fn number(&mut self) {
+        while ('0'..'9').contains(&self.peek()) {
+            self.advance();
+        }
+        if self.peek() == '.' && ('0'..'9').contains(&self.peek_next()) {
+            self.advance();
+            while ('0'..'9').contains(&self.peek()) {
+                self.advance();
+            }
+        }
+
+        let f = &self.source[self.start..self.current];
+
+        let f: f64 = f.parse().unwrap();
+
+        self.add_token_num(f);
+    }
+
+    fn identifier(&mut self) {
+        while self.peek().is_alphanumeric() {
+            self.advance();
+        }
+        let text = &self.source[self.start..self.current];
+        let token_type = self.keywords.get(text);
+
+        match token_type {
+            Some(k) => self.add_token(k.clone()),
+            _ => self.add_token(TokenType::IDENTIFIER),
+        }
     }
 }
