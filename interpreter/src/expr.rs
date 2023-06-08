@@ -1,26 +1,35 @@
-use crate::token::Token;
+use crate::token::{Literal, Token, TokenType};
 
 #[derive(Debug)]
-pub struct Expr {
-    pub node: ExprType,
+pub enum Expr {
+    Literal(Token),
+    Grouping(Box<Expr>),
+    Unary(Token, Box<Expr>),
+    Binary(Box<Expr>, Token, Box<Expr>),
 }
 
 impl Expr {
-    pub fn new(node: ExprType) -> Self {
-        Expr { node }
+    pub fn accept<T>(&self, v: &mut dyn Visitor<T>) -> T {
+        match *self {
+            Expr::Literal(ref lit) => v.visit_literal(self, lit),
+            Expr::Grouping(ref inside) => v.visit_grouping(self, inside.as_ref()),
+            Expr::Unary(ref op, ref rhs) => v.visit_unary(self, op, rhs.as_ref()),
+            Expr::Binary(ref lhs, ref op, ref rhs) => {
+                v.visit_binary(self, lhs.as_ref(), op, rhs.as_ref())
+            }
+        }
     }
 }
 
+/*
 #[derive(Debug)]
 pub enum ExprType {
-    Logical(Logical),
     Binary(Binary),
     Unary(Unary),
     Grouping(Box<Expr>),
     Literal(Literal),
 }
 
-/*
 impl ExprType {
     pub fn to_str(&self) -> &str {
         match self {
@@ -31,19 +40,11 @@ impl ExprType {
         }
     }
 }
-*/
+
 
 impl ExprType {
     pub fn binary(left: Expr, operator: BinaryOperator, right: Expr) -> ExprType {
         ExprType::Binary(Binary {
-            left: Box::new(left),
-            operator,
-            right: Box::new(right),
-        })
-    }
-
-    pub fn logical(left: Expr, operator: LogicalOperator, right: Expr) -> ExprType {
-        ExprType::Logical(Logical {
             left: Box::new(left),
             operator,
             right: Box::new(right),
@@ -71,28 +72,6 @@ pub enum Literal {
 }
 
 #[derive(Debug)]
-pub enum LogicalOperator {
-    And,
-    Or,
-}
-
-impl LogicalOperator {
-    pub fn to_str(&self) -> &str {
-        match self {
-            LogicalOperator::And => "and",
-            LogicalOperator::Or => "or",
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Logical {
-    pub left: Box<Expr>,
-    pub operator: LogicalOperator,
-    pub right: Box<Expr>,
-}
-
-#[derive(Debug)]
 pub enum BinaryOperator {
     Equal,
     BangEq,
@@ -104,6 +83,8 @@ pub enum BinaryOperator {
     Plus,
     Slash,
     Star,
+    And,
+    Or,
 }
 
 impl BinaryOperator {
@@ -119,6 +100,8 @@ impl BinaryOperator {
             BinaryOperator::Plus => "+",
             BinaryOperator::Slash => "/",
             BinaryOperator::Star => "*",
+            BinaryOperator::Or => "or",
+            BinaryOperator::And => "and",
         }
     }
 }
@@ -151,6 +134,30 @@ pub struct Unary {
     unary: Box<Expr>,
 }
 
+*/
+
 pub fn print_ast(expr: Expr) {
     println!("{:#?}", expr);
+}
+
+pub trait Visitor<T> {
+    fn visit_expr(&mut self, expr: &Expr) -> T {
+        unimplemented!();
+    }
+
+    fn visit_literal(&mut self, expr: &Expr, lit: &Token) -> T {
+        self.visit_expr(expr)
+    }
+
+    fn visit_grouping(&mut self, expr: &Expr, inside: &Expr) -> T {
+        self.visit_expr(expr)
+    }
+
+    fn visit_unary(&mut self, expr: &Expr, op: &Token, rhs: &Expr) -> T {
+        self.visit_expr(expr)
+    }
+
+    fn visit_binary(&mut self, expr: &Expr, lhs: &Expr, op: &Token, rhs: &Expr) -> T {
+        self.visit_expr(expr)
+    }
 }

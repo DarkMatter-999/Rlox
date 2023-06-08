@@ -3,12 +3,14 @@ use std::{
     io::{self, Read, Write},
 };
 
-use expr::{Expr, ExprType, *};
+use expr::{Expr, *};
 use scanner::Scanner;
 
 use crate::parser::Parser;
 
 mod expr;
+mod interpreter;
+mod object;
 mod parser;
 mod scanner;
 mod token;

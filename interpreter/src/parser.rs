@@ -1,5 +1,5 @@
 use crate::{
-    expr::{Binary, BinaryOperator, Expr, ExprType, Literal, Unary, UnaryOperator},
+    expr::Expr,
     token::{self, Token, TokenType, *},
 };
 
@@ -13,33 +13,27 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Expr {
+    pub fn parse(&mut self) -> Result<Expr, bool> {
         return self.expression();
     }
 
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Result<Expr, bool> {
         return self.equality();
     }
-    fn equality(&mut self) -> Expr {
-        let mut expr: Expr = self.comparision();
+    fn equality(&mut self) -> Result<Expr, bool> {
+        let mut expr: Expr = self.comparision()?;
 
         while self.match_tok(vec![TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL]) {
-            let operator = match self.previous().token_type {
-                TokenType::BANG_EQUAL => BinaryOperator::BangEq,
-                TokenType::EQUAL_EQUAL => BinaryOperator::Equal,
-                _ => panic!("Invalid token at {}", self.current),
-            };
-            let right: Expr = self.comparision();
+            let operator = self.previous();
+            let right: Expr = self.comparision()?;
 
-            expr = Expr {
-                node: ExprType::binary(expr, operator, right),
-            };
+            expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
         }
 
-        return expr;
+        return Ok(expr);
     }
-    fn comparision(&mut self) -> Expr {
-        let mut expr: Expr = self.term();
+    fn comparision(&mut self) -> Result<Expr, bool> {
+        let mut expr: Expr = self.term()?;
 
         while self.match_tok(vec![
             TokenType::GREATER,
@@ -47,133 +41,72 @@ impl Parser {
             TokenType::LESS,
             TokenType::LESS_EQUAL,
         ]) {
-            let operator = match self.previous().token_type {
-                TokenType::GREATER => BinaryOperator::GreaterThan,
-                TokenType::GREATER_EQUAL => BinaryOperator::GreaterThanEq,
-                TokenType::LESS => BinaryOperator::LessThan,
-                TokenType::LESS_EQUAL => BinaryOperator::LessThanEq,
-                _ => panic!("Invalid token at {}", self.current),
-            };
-            let right: Expr = self.comparision();
+            let operator = self.previous();
+            let right: Expr = self.comparision()?;
 
-            expr = Expr {
-                node: ExprType::binary(expr, operator, right),
-            };
+            expr = Expr::Binary(Box::new(expr), operator, Box::new(right))
         }
 
-        return expr;
+        return Ok(expr);
     }
 
-    fn term(&mut self) -> Expr {
-        let mut expr: Expr = self.factor();
+    fn term(&mut self) -> Result<Expr, bool> {
+        let mut expr: Expr = self.factor()?;
 
         while self.match_tok(vec![TokenType::MINUS, TokenType::PLUS]) {
-            let operator = match self.previous().token_type {
-                TokenType::MINUS => BinaryOperator::Minus,
-                TokenType::PLUS => BinaryOperator::Plus,
-                _ => panic!("Invalid token at {}", self.current),
-            };
-            let right: Expr = self.factor();
-
-            expr = Expr {
-                node: ExprType::binary(expr, operator, right),
-            };
+            let operator = self.previous();
+            let right: Expr = self.factor()?;
+            expr = Expr::Binary(Box::new(expr), operator, Box::new(right))
         }
 
-        return expr;
+        return Ok(expr);
     }
 
-    fn factor(&mut self) -> Expr {
-        let mut expr: Expr = self.unary();
+    fn factor(&mut self) -> Result<Expr, bool> {
+        let mut expr: Expr = self.unary()?;
 
         while self.match_tok(vec![TokenType::SLASH, TokenType::STAR]) {
-            let operator = match self.previous().token_type {
-                TokenType::SLASH => BinaryOperator::Slash,
-                TokenType::STAR => BinaryOperator::Star,
-                _ => panic!("Invalid token at {}", self.current),
-            };
-            let right: Expr = self.unary();
+            let operator = self.previous();
+            let right: Expr = self.unary()?;
 
-            expr = Expr {
-                node: ExprType::binary(expr, operator, right),
-            };
+            expr = Expr::Binary(Box::new(expr), operator, Box::new(right))
         }
 
-        return expr;
+        return Ok(expr);
     }
 
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> Result<Expr, bool> {
         if self.match_tok(vec![TokenType::BANG, TokenType::MINUS]) {
-            let operator = match self.previous().token_type {
-                TokenType::BANG => UnaryOperator::Bang,
-                TokenType::MINUS => UnaryOperator::Minus,
-                _ => panic!("Invalid token at {}", self.current),
-            };
-            let right: Expr = self.unary();
+            let operator = self.previous();
+            let right: Expr = self.unary()?;
 
-            let expr = Expr {
-                node: ExprType::unary(operator, right),
-            };
+            let expr = Expr::Unary(operator, Box::new(right));
 
-            return expr;
+            return Ok(expr);
         }
 
         return self.primary();
     }
 
-    fn primary(&mut self) -> Expr {
-        match self.peek().token_type {
-            TokenType::FALSE => {
-                self.advance();
-                return Expr {
-                    node: ExprType::Literal(Literal::False),
-                };
-            }
-            TokenType::TRUE => {
-                self.advance();
-                return Expr {
-                    node: ExprType::Literal(Literal::True),
-                };
-            }
-            TokenType::NIL => {
-                self.advance();
-                return Expr {
-                    node: ExprType::Literal(Literal::None),
-                };
-            }
-            TokenType::NUMBER => {
-                self.advance();
-                let n = match self.previous().lexeme {
-                    token::Literal::Number(n) => n,
-                    _ => panic!("Number not recieved {:?}", self.previous()),
-                };
-                return Expr {
-                    node: ExprType::Literal(Literal::Number(n)),
-                };
-            }
-            TokenType::STRING => {
-                self.advance();
-                let s = match self.previous().lexeme {
-                    token::Literal::StringLit(s) => s,
-                    _ => panic!("String not recieved"),
-                };
-                return Expr {
-                    node: ExprType::Literal(Literal::String(s)),
-                };
-            }
-            TokenType::LEFT_PAREN => {
-                self.advance();
-                let expr = self.expression();
-                self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression");
-                return Expr {
-                    node: ExprType::grouping(expr),
-                };
-            }
-            _ => {
-                self.error(self.peek(), "Expect expression");
-                panic!("Error");
-            }
+    fn primary(&mut self) -> Result<Expr, bool> {
+        if self.match_tok(vec![
+            TokenType::FALSE,
+            TokenType::TRUE,
+            TokenType::NIL,
+            TokenType::NUMBER,
+            TokenType::STRING,
+        ]) {
+            self.advance();
+            return Ok(Expr::Literal(self.peek()));
         }
+
+        if self.match_tok(vec![TokenType::LEFT_PAREN]) {
+            self.advance();
+            let expr = self.expression()?;
+            self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression");
+            return Ok(Expr::Grouping(Box::new(expr)));
+        }
+        return Err(false);
     }
 
     fn match_tok(&mut self, tokens: Vec<TokenType>) -> bool {
