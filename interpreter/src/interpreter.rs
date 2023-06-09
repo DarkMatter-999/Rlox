@@ -1,4 +1,5 @@
 use crate::{
+    error::{Error, ResultMSG},
     expr::{Expr, Visitor},
     object::Object,
     token::{Literal, Token, TokenType},
@@ -7,21 +8,21 @@ use crate::{
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Object, bool> {
+    pub fn evaluate(&mut self, expr: &Expr) -> ResultMSG<Object> {
         self.visit_grouping(expr, expr)
     }
 }
 
-impl Visitor<Result<Object, bool>> for Interpreter {
-    fn visit_literal(&mut self, expr: &Expr, lit: &Token) -> Result<Object, bool> {
+impl Visitor<ResultMSG<Object>> for Interpreter {
+    fn visit_literal(&mut self, expr: &Expr, lit: &Token) -> ResultMSG<Object> {
         Ok(Object::Literal(lit.lexeme.clone()))
     }
 
-    fn visit_grouping(&mut self, expr: &Expr, inside: &Expr) -> Result<Object, bool> {
+    fn visit_grouping(&mut self, expr: &Expr, inside: &Expr) -> ResultMSG<Object> {
         inside.accept(self)
     }
 
-    fn visit_unary(&mut self, expr: &Expr, op: &Token, rhs: &Expr) -> Result<Object, bool> {
+    fn visit_unary(&mut self, expr: &Expr, op: &Token, rhs: &Expr) -> ResultMSG<Object> {
         let r: Object = rhs.accept(self)?;
 
         match op.token_type {
@@ -43,7 +44,7 @@ impl Visitor<Result<Object, bool>> for Interpreter {
         lhs: &Expr,
         op: &Token,
         rhs: &Expr,
-    ) -> Result<Object, bool> {
+    ) -> ResultMSG<Object> {
         use crate::object::Object::Literal as ObjLit;
         use crate::token::Literal::{Number, StringLit};
         use std::cmp::Ordering as Ord;
@@ -149,7 +150,7 @@ impl Visitor<Result<Object, bool>> for Interpreter {
 
         Ok(ObjLit(res))
     }
-    fn visit_logical(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Result<Object, bool> {
+    fn visit_logical(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> ResultMSG<Object> {
         let l: Object = lhs.accept(self)?;
 
         let res: Literal = match op.token_type {
@@ -176,13 +177,15 @@ impl Visitor<Result<Object, bool>> for Interpreter {
 }
 
 impl Interpreter {
-    fn err_op(&self, msg: &str, op: &Token) -> Result<Object, bool> {
-        println!("{}: {} {:?}", op.line, msg.to_string(), op.lexeme.clone());
-        Err(true)
+    fn err_op(&self, msg: &str, op: &Token) -> ResultMSG<Object> {
+        Err(Error::Runtime(
+            op.line,
+            msg.to_string(),
+            format!("{:?}", op.lexeme),
+        ))
     }
 
-    fn err_near(&self, msg: &str, op: &Token, near: String) -> Result<Object, bool> {
-        println!("{}: {}, {}", op.line, msg.to_string(), near);
-        Err(true)
+    fn err_near(&self, msg: &str, op: &Token, near: String) -> ResultMSG<Object> {
+        Err(Error::Runtime(op.line, msg.to_string(), near))
     }
 }

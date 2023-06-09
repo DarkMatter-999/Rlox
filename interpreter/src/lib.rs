@@ -6,7 +6,9 @@ use std::{
 use expr::{Expr, *};
 use scanner::Scanner;
 
-use crate::{interpreter::Interpreter, parser::Parser, token::Token};
+use crate::{interpreter::Interpreter, parser::Parser};
+
+mod error;
 mod expr;
 mod interpreter;
 mod object;

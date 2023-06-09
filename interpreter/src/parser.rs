@@ -1,4 +1,5 @@
 use crate::{
+    error::{Error, ResultMSG},
     expr::Expr,
     token::{self, Token, TokenType, *},
 };
@@ -13,14 +14,14 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Expr, bool> {
+    pub fn parse(&mut self) -> ResultMSG<Expr> {
         return self.expression();
     }
 
-    fn expression(&mut self) -> Result<Expr, bool> {
+    fn expression(&mut self) -> ResultMSG<Expr> {
         return self.equality();
     }
-    fn equality(&mut self) -> Result<Expr, bool> {
+    fn equality(&mut self) -> ResultMSG<Expr> {
         let mut expr: Expr = self.comparision()?;
 
         while self.match_tok(vec![TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL]) {
@@ -32,7 +33,7 @@ impl Parser {
 
         return Ok(expr);
     }
-    fn comparision(&mut self) -> Result<Expr, bool> {
+    fn comparision(&mut self) -> ResultMSG<Expr> {
         let mut expr: Expr = self.term()?;
 
         while self.match_tok(vec![
@@ -50,7 +51,7 @@ impl Parser {
         return Ok(expr);
     }
 
-    fn term(&mut self) -> Result<Expr, bool> {
+    fn term(&mut self) -> ResultMSG<Expr> {
         let mut expr: Expr = self.factor()?;
 
         while self.match_tok(vec![TokenType::MINUS, TokenType::PLUS]) {
@@ -62,7 +63,7 @@ impl Parser {
         return Ok(expr);
     }
 
-    fn factor(&mut self) -> Result<Expr, bool> {
+    fn factor(&mut self) -> ResultMSG<Expr> {
         let mut expr: Expr = self.unary()?;
 
         while self.match_tok(vec![TokenType::SLASH, TokenType::STAR]) {
@@ -75,7 +76,7 @@ impl Parser {
         return Ok(expr);
     }
 
-    fn unary(&mut self) -> Result<Expr, bool> {
+    fn unary(&mut self) -> ResultMSG<Expr> {
         if self.match_tok(vec![TokenType::BANG, TokenType::MINUS]) {
             let operator = self.previous();
             let right: Expr = self.unary()?;
@@ -88,7 +89,7 @@ impl Parser {
         return self.primary();
     }
 
-    fn primary(&mut self) -> Result<Expr, bool> {
+    fn primary(&mut self) -> ResultMSG<Expr> {
         if self.match_tok(vec![TokenType::FALSE, TokenType::TRUE, TokenType::NIL]) {
             self.advance();
             return Ok(Expr::Literal(self.peek()));
@@ -103,7 +104,11 @@ impl Parser {
             self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression");
             return Ok(Expr::Grouping(Box::new(expr)));
         }
-        return Err(false);
+        return Err(Error::Parser(
+            self.peek().line,
+            "Unexpected Token".to_string(),
+            format!("{:?}", self.peek()),
+        ));
     }
 
     fn match_tok(&mut self, tokens: Vec<TokenType>) -> bool {
