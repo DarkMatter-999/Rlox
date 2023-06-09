@@ -42,7 +42,7 @@ impl Parser {
             TokenType::LESS_EQUAL,
         ]) {
             let operator = self.previous();
-            let right: Expr = self.comparision()?;
+            let right: Expr = self.term()?;
 
             expr = Expr::Binary(Box::new(expr), operator, Box::new(right))
         }
@@ -89,15 +89,13 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, bool> {
-        if self.match_tok(vec![
-            TokenType::FALSE,
-            TokenType::TRUE,
-            TokenType::NIL,
-            TokenType::NUMBER,
-            TokenType::STRING,
-        ]) {
+        if self.match_tok(vec![TokenType::FALSE, TokenType::TRUE, TokenType::NIL]) {
             self.advance();
             return Ok(Expr::Literal(self.peek()));
+        }
+
+        if self.match_tok(vec![TokenType::NUMBER, TokenType::STRING]) {
+            return Ok(Expr::Literal(self.previous()));
         }
 
         if self.match_tok(vec![TokenType::LEFT_PAREN]) {

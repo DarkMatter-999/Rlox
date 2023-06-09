@@ -156,7 +156,9 @@ pub trait Visitor<T> {
     fn visit_unary(&mut self, expr: &Expr, op: &Token, rhs: &Expr) -> T {
         self.visit_expr(expr)
     }
-
+    fn visit_logical(&mut self, expr: &Expr, op: &Token, rhs: &Expr) -> T {
+        self.visit_expr(expr)
+    }
     fn visit_binary(&mut self, expr: &Expr, lhs: &Expr, op: &Token, rhs: &Expr) -> T {
         self.visit_expr(expr)
     }

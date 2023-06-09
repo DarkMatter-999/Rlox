@@ -6,8 +6,7 @@ use std::{
 use expr::{Expr, *};
 use scanner::Scanner;
 
-use crate::parser::Parser;
-
+use crate::{interpreter::Interpreter, parser::Parser, token::Token};
 mod expr;
 mod interpreter;
 mod object;
@@ -62,6 +61,13 @@ fn run(code: &str) -> Result<bool, ()> {
     let expr = parser.parse();
 
     println!("{:#?}", expr);
+
+    let mut interpreter = Interpreter {};
+    if let Ok(expr) = expr {
+        let out = interpreter.evaluate(&expr);
+
+        println!("{:?}", out);
+    }
 
     return Ok(true);
 }
