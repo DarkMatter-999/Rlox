@@ -99,7 +99,6 @@ impl Parser {
         }
 
         if self.match_tok(vec![TokenType::LEFT_PAREN]) {
-            self.advance();
             let expr = self.expression()?;
             self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression");
             return Ok(Expr::Grouping(Box::new(expr)));
