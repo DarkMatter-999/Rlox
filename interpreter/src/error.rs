@@ -40,3 +40,9 @@ impl error::Error for Error {
         }
     }
 }
+
+impl Error {
+    pub fn boxed(self) -> Box<Error> {
+        Box::new(self)
+    }
+}

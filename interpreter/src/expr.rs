@@ -1,23 +1,18 @@
-use crate::token::{Literal, Token, TokenType};
+use crate::token::Token;
 
 #[derive(Debug)]
 pub enum Expr {
+    Identifier(String),
     Literal(Token),
     Grouping(Box<Expr>),
     Unary(Token, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
+    Assignment(String, Box<Expr>),
 }
 
 impl Expr {
     pub fn accept<T>(&self, v: &mut dyn Visitor<T>) -> T {
-        match *self {
-            Expr::Literal(ref lit) => v.visit_literal(self, lit),
-            Expr::Grouping(ref inside) => v.visit_grouping(self, inside.as_ref()),
-            Expr::Unary(ref op, ref rhs) => v.visit_unary(self, op, rhs.as_ref()),
-            Expr::Binary(ref lhs, ref op, ref rhs) => {
-                v.visit_binary(self, lhs.as_ref(), op, rhs.as_ref())
-            }
-        }
+        v.visit_expr(self)
     }
 }
 
@@ -161,5 +156,23 @@ pub trait Visitor<T> {
     }
     fn visit_binary(&mut self, expr: &Expr, lhs: &Expr, op: &Token, rhs: &Expr) -> T {
         self.visit_expr(expr)
+    }
+
+    fn visit_identifier(&mut self, expr: &Expr, n: &String) -> T {
+        self.visit_expr(expr)
+    }
+
+    fn visit_assignment(&mut self, expr: &Expr, n: &String, rhs: &Box<Expr>) -> T {
+        self.visit_expr(expr)
+    }
+}
+
+pub trait Boxed<T> {
+    fn boxed(self) -> Box<T>;
+}
+
+impl Boxed<Expr> for Expr {
+    fn boxed(self) -> Box<Self> {
+        Box::new(self)
     }
 }

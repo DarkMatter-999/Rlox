@@ -1,21 +1,57 @@
+use std::rc::Rc;
+
 use crate::{
+    env::Env,
     error::{Error, ResultMSG},
-    expr::{Expr, Visitor},
+    expr::{Expr, Visitor as ExprVisitor},
     object::Object,
+    stmt::{Stmt, Visitor as StmtVisitor},
     token::{Literal, Token, TokenType},
 };
 
-pub struct Interpreter {}
+pub struct Interpreter {
+    env: Rc<Env>,
+    repl: bool,
+}
 
 impl Interpreter {
+    pub fn new(repl: bool) -> Self {
+        Interpreter {
+            env: Env::new(None),
+            repl,
+        }
+    }
+
+    pub fn interpret(&mut self, s: &Stmt) -> ResultMSG<()> {
+        s.accept(self)
+    }
+
+    fn scoped(&self) -> Self {
+        Interpreter {
+            env: Env::new(Some(self.env.clone())),
+            repl: self.repl,
+        }
+    }
+
     pub fn evaluate(&mut self, expr: &Expr) -> ResultMSG<Object> {
         self.visit_grouping(expr, expr)
     }
 }
 
-impl Visitor<ResultMSG<Object>> for Interpreter {
+impl ExprVisitor<ResultMSG<Object>> for Interpreter {
+    fn visit_expr(&mut self, expr: &Expr) -> ResultMSG<Object> {
+        match *expr {
+            Expr::Identifier(ref name) => self.visit_identifier(expr, name),
+            Expr::Unary(ref op, ref rhs) => self.visit_unary(expr, op, rhs),
+            Expr::Binary(ref lhs, ref op, ref rhs) => self.visit_binary(expr, lhs, op, rhs),
+            Expr::Literal(ref lit) => self.visit_literal(expr, lit),
+            Expr::Grouping(ref inside) => self.visit_grouping(expr, inside),
+            Expr::Assignment(ref id, ref rhs) => self.visit_assignment(expr, id, rhs),
+        }
+    }
+
     fn visit_literal(&mut self, expr: &Expr, lit: &Token) -> ResultMSG<Object> {
-        Ok(Object::Literal(lit.lexeme.clone()))
+        Ok(Object::Literal(lit.literal.clone()))
     }
 
     fn visit_grouping(&mut self, expr: &Expr, inside: &Expr) -> ResultMSG<Object> {
@@ -173,6 +209,54 @@ impl Visitor<ResultMSG<Object>> for Interpreter {
         };
 
         Ok(Object::Literal(res))
+    }
+
+    fn visit_identifier(&mut self, expr: &Expr, n: &String) -> ResultMSG<Object> {
+        self.env.get(&n).map(|lit| lit.clone())
+    }
+
+    fn visit_assignment(&mut self, expr: &Expr, n: &String, rhs: &Box<Expr>) -> ResultMSG<Object> {
+        let val = self.evaluate(rhs)?;
+        self.env.assign(&n, val).map(|lit| lit.clone())
+    }
+}
+
+impl StmtVisitor<ResultMSG<()>> for Interpreter {
+    fn visit_stmt(&mut self, s: &Stmt) -> ResultMSG<()> {
+        match *s {
+            Stmt::Empty => Ok(()),
+            Stmt::Print(ref e) => self.visit_print_stmt(e),
+            Stmt::Expression(ref e) => self.visit_expression_stmt(e),
+            Stmt::Block(ref ss) => self.visit_block_stmt(ss),
+            Stmt::Declaration(ref n, ref e) => self.visit_declaration_stmt(n, e.as_ref()),
+        }
+    }
+
+    fn visit_expression_stmt(&mut self, e: &Expr) -> ResultMSG<()> {
+        if self.repl {
+            self.visit_print_stmt(e)
+        } else {
+            e.accept(self).map(|_| ())
+        }
+    }
+
+    fn visit_print_stmt(&mut self, expression: &Expr) -> ResultMSG<()> {
+        println!("{:?}", expression.accept(self)?);
+        Ok(())
+    }
+
+    fn visit_declaration_stmt(&mut self, name: &String, init: Option<&Expr>) -> ResultMSG<()> {
+        let val: Object =
+            init.map_or_else(|| Ok(Object::Literal(Literal::None)), |e| e.accept(self))?;
+        self.env.define(&name, val)
+    }
+
+    fn visit_block_stmt(&mut self, statements: &Vec<Stmt>) -> ResultMSG<()> {
+        let mut scope: Self = self.scoped();
+        for stmt in statements {
+            stmt.accept(&mut scope)?;
+        }
+        Ok(())
     }
 }
 

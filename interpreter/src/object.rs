@@ -1,7 +1,7 @@
 use crate::token::Literal;
 use std::cmp::{self, Ordering};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Object {
     Literal(Literal),
 }

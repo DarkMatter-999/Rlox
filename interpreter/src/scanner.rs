@@ -53,7 +53,8 @@ impl Scanner {
         }
         self.tokens.push(Token {
             token_type: TokenType::EOF,
-            lexeme: None,
+            lexeme: "".to_string(),
+            literal: None,
             line: self.line,
         });
 
@@ -138,7 +139,8 @@ impl Scanner {
     fn add_token(&mut self, token: TokenType) {
         self.tokens.push(Token {
             token_type: token,
-            lexeme: None,
+            lexeme: "".to_string(),
+            literal: None,
             line: self.line,
         });
     }
@@ -146,7 +148,8 @@ impl Scanner {
     fn add_token_str(&mut self, text: String) {
         self.tokens.push(Token {
             token_type: STRING,
-            lexeme: StringLit(text),
+            lexeme: text.clone(),
+            literal: StringLit(text),
             line: self.line,
         });
     }
@@ -154,7 +157,8 @@ impl Scanner {
     fn add_token_num(&mut self, n: f64) {
         self.tokens.push(Token {
             token_type: NUMBER,
-            lexeme: Number(n),
+            lexeme: n.to_string(),
+            literal: Number(n),
             line: self.line,
         });
     }
@@ -204,12 +208,12 @@ impl Scanner {
     }
 
     fn number(&mut self) {
-        while ('0'..'9').contains(&self.peek()) {
+        while ('0'..='9').contains(&self.peek()) {
             self.advance();
         }
-        if self.peek() == '.' && ('0'..'9').contains(&self.peek_next()) {
+        if self.peek() == '.' && ('0'..='9').contains(&self.peek_next()) {
             self.advance();
-            while ('0'..'9').contains(&self.peek()) {
+            while ('0'..='9').contains(&self.peek()) {
                 self.advance();
             }
         }
@@ -230,7 +234,16 @@ impl Scanner {
 
         match token_type {
             Some(k) => self.add_token(k.clone()),
-            _ => self.add_token(TokenType::IDENTIFIER),
+            _ => self.add_token_identifier(text.to_string()),
         }
+    }
+
+    fn add_token_identifier(&mut self, id: String) {
+        self.tokens.push(Token {
+            token_type: TokenType::IDENTIFIER,
+            lexeme: id,
+            literal: None,
+            line: self.line,
+        });
     }
 }

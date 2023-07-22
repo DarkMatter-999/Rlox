@@ -1,6 +1,7 @@
 use crate::{
     error::{Error, ResultMSG},
-    expr::Expr,
+    expr::{Boxed, Expr},
+    stmt::Stmt,
     token::{self, Token, TokenType, *},
 };
 
@@ -14,13 +15,31 @@ impl Parser {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> ResultMSG<Expr> {
-        return self.expression();
+    pub fn parse(&mut self) -> ResultMSG<Stmt> {
+        return self.statement();
     }
 
     fn expression(&mut self) -> ResultMSG<Expr> {
-        return self.equality();
+        return self.assignment();
     }
+
+    fn assignment(&mut self) -> ResultMSG<Expr> {
+        let expr = self.equality()?;
+
+        if self.match_tok(vec![TokenType::EQUAL]) {
+            return match expr {
+                Expr::Identifier(id) => Ok(Expr::Assignment(id, self.assignment()?.boxed())),
+                _ => Err(Error::Parser(
+                    self.peek().line,
+                    "Unexpected Token".to_string(),
+                    format!("{:?}", self.peek()),
+                )),
+            };
+        }
+
+        Ok(expr)
+    }
+
     fn equality(&mut self) -> ResultMSG<Expr> {
         let mut expr: Expr = self.comparision()?;
 
@@ -90,6 +109,10 @@ impl Parser {
     }
 
     fn primary(&mut self) -> ResultMSG<Expr> {
+        if self.match_tok(vec![TokenType::IDENTIFIER]) {
+            return Ok(Expr::Identifier(self.previous().lexeme.clone()));
+        }
+
         if self.match_tok(vec![TokenType::FALSE, TokenType::TRUE, TokenType::NIL]) {
             self.advance();
             return Ok(Expr::Literal(self.peek()));
@@ -129,6 +152,23 @@ impl Parser {
         return self.peek().token_type == token;
     }
 
+    fn check_types(&mut self, types: &[TokenType]) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        match self.peek() {
+            t => t.in_types(types.to_vec()),
+            _ => false,
+        }
+    }
+
+    fn check_next(&mut self, types: &[TokenType]) -> Option<ResultMSG<Token>> {
+        if self.check_types(types) {
+            return Some(self.peek_next());
+        }
+        None
+    }
+
     fn advance(&mut self) -> Token {
         if !self.is_at_end() {
             self.current += 1;
@@ -145,6 +185,17 @@ impl Parser {
         return self.tokens[self.current].clone();
     }
 
+    fn peek_next(&self) -> ResultMSG<Token> {
+        if self.is_at_end() {
+            return Err(Error::Parser(
+                self.peek().line,
+                "End of File".to_string(),
+                format!("{:?}", self.peek()),
+            ));
+        }
+        return Ok(self.tokens[self.current + 1].clone());
+    }
+
     fn previous(&self) -> Token {
         return self.tokens[self.current - 1].clone();
     }
@@ -156,7 +207,8 @@ impl Parser {
         self.error(self.peek(), message);
         return Token {
             token_type: token,
-            lexeme: token::Literal::None,
+            lexeme: "".to_string(),
+            literal: token::Literal::None,
             line: 0,
         };
     }
@@ -188,5 +240,90 @@ impl Parser {
 
             self.advance();
         }
+    }
+
+    fn statement(&mut self) -> ResultMSG<Stmt> {
+        let v = self.match_tok(vec![
+            TokenType::SEMICOLON,
+            TokenType::PRINT,
+            TokenType::VAR,
+            TokenType::LEFT_BRACE,
+        ]);
+
+        let mut n: Option<ResultMSG<Token>> = None;
+
+        if v {
+            n = Some(Ok(self.previous()));
+        }
+
+        if n.is_none() {
+            return self.expr_statement();
+        }
+
+        let token = n.unwrap()?;
+
+        match token.token_type {
+            TokenType::SEMICOLON => Ok(Stmt::Empty),
+            TokenType::PRINT => self.print_statement(),
+            TokenType::VAR => self.declaration_statement(),
+            TokenType::LEFT_BRACE => self.block_statement(),
+            _ => Err(Error::Parser(
+                self.peek().line,
+                "Unexpected Token".to_string(),
+                format!("{:?}", token),
+            )),
+        }
+    }
+
+    fn print_statement(&mut self) -> ResultMSG<Stmt> {
+        let expr: Expr = self.expression()?;
+        self.consume(TokenType::SEMICOLON, "Expect ';' after value.");
+        Ok(Stmt::Print(expr))
+    }
+
+    fn expr_statement(&mut self) -> ResultMSG<Stmt> {
+        let expr: Expr = self.expression()?;
+        Ok(Stmt::Expression(expr))
+    }
+
+    fn declaration_statement(&mut self) -> ResultMSG<Stmt> {
+        let id: Token = self.consume(TokenType::IDENTIFIER, "Expect variable name.");
+
+        if !self.match_tok(vec![TokenType::EQUAL]) {
+            return Ok(Stmt::Declaration(id.lexeme, None));
+        }
+
+        let expr: Expr = self.expression()?;
+
+        self.consume(TokenType::SEMICOLON, "Expect ';' after value.");
+
+        Ok(Stmt::Declaration(id.lexeme, Some(expr)))
+    }
+
+    fn block_statement(&mut self) -> ResultMSG<Stmt> {
+        let mut stmts: Vec<Stmt> = Vec::new();
+
+        while self.check_next(&[TokenType::RIGHT_BRACE]).is_none() {
+            stmts.push(self.statement()?);
+        }
+
+        Ok(Stmt::Block(stmts))
+    }
+}
+
+impl Iterator for Parser {
+    type Item = ResultMSG<Stmt>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.check_next(&[TokenType::EOF]).is_some() {
+            return None;
+        }
+
+        let res = self.statement();
+        if res.is_err() {
+            self.synchronize();
+        }
+
+        Some(res)
     }
 }

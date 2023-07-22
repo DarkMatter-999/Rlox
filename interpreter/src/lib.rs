@@ -1,19 +1,20 @@
 use std::{
     fs::File,
-    io::{self, Read, Write},
+    io::{self, BufRead, BufReader, Read, Write},
 };
 
-use expr::{Expr, *};
 use scanner::Scanner;
 
 use crate::{interpreter::Interpreter, parser::Parser};
 
+mod env;
 mod error;
 mod expr;
 mod interpreter;
 mod object;
 mod parser;
 mod scanner;
+mod stmt;
 mod token;
 
 pub fn run_file(path: String) {
@@ -22,17 +23,40 @@ pub fn run_file(path: String) {
         Ok(file) => file,
     };
 
-    let mut code = String::new();
-    match file.read_to_string(&mut code) {
-        Err(e) => panic!("Error reading file {}\n{}", path, e),
-        Ok(_) => (),
-    }
+    let reader = BufReader::new(file);
 
-    run(&code);
+    let mut i = Interpreter::new(false);
+
+    /*    let mut code = String::new();
+        match file.(&mut code) {
+            Err(e) => panic!("Error reading file {}\n{}", path, e),
+            Ok(_) => (),
+        }
+
+
+        let mut i = Interpreter::new(false);
+
+        run(&code, &mut i);
+    */
+    for line in reader.lines() {
+        match line {
+            Err(e) => panic!("Error reading file {}\n{}", path, e),
+            Ok(code) => {
+                match run(&code, &mut i) {
+                    Ok(t) => {}
+                    Err(e) => {
+                        std::process::exit(65);
+                    }
+                };
+            }
+        }
+    }
 }
 
 pub fn run_prompt() -> io::Result<()> {
     let stdin = io::stdin();
+
+    let mut i = Interpreter::new(true);
     loop {
         print!("> ");
         io::stdout().flush()?;
@@ -41,7 +65,7 @@ pub fn run_prompt() -> io::Result<()> {
         if line.is_empty() || line == "\n" {
             break;
         }
-        match run(&line) {
+        match run(&line, &mut i) {
             Ok(t) => {}
             Err(e) => {
                 std::process::exit(65);
@@ -51,7 +75,7 @@ pub fn run_prompt() -> io::Result<()> {
     Ok(())
 }
 
-fn run(code: &str) -> Result<bool, ()> {
+fn run(code: &str, interpreter: &mut Interpreter) -> Result<bool, ()> {
     let mut scanner = Scanner::new(code.to_string());
     let tokens = scanner.scan_tokens();
 
@@ -60,13 +84,12 @@ fn run(code: &str) -> Result<bool, ()> {
     }
 
     let mut parser = Parser::new(tokens);
-    let expr = parser.parse();
+    let stmt = parser.parse();
 
-    println!("{:#?}", expr);
+    println!("{:#?}", stmt);
 
-    let mut interpreter = Interpreter {};
-    if let Ok(expr) = expr {
-        let out = interpreter.evaluate(&expr);
+    if let Ok(stmt) = stmt {
+        let out = interpreter.interpret(&stmt);
 
         println!("{:?}", out);
     }
