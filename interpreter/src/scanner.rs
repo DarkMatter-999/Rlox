@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::token::{Literal::*, Token, TokenType, TokenType::*};
+use crate::{
+    parser::Parser,
+    token::{Literal::*, Token, TokenType, TokenType::*},
+};
 
 pub struct Scanner {
     source: String,
@@ -28,6 +31,7 @@ fn fill_keywords(keywords: &mut HashMap<&str, TokenType>) {
     keywords.insert("true", TRUE);
     keywords.insert("var", VAR);
     keywords.insert("while", WHILE);
+    keywords.insert("break", BREAK);
 }
 
 impl Scanner {
@@ -245,5 +249,15 @@ impl Scanner {
             literal: None,
             line: self.line,
         });
+    }
+}
+
+pub trait StmtIterator {
+    fn statements(self) -> Parser;
+}
+
+impl StmtIterator for Scanner {
+    fn statements(self) -> Parser {
+        Parser::new(self.tokens)
     }
 }

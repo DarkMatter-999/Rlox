@@ -1,9 +1,10 @@
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{self, stderr, BufRead, BufReader, Read, Write},
 };
 
-use scanner::Scanner;
+use error::ResultMSG;
+use scanner::{Scanner, StmtIterator};
 
 use crate::{interpreter::Interpreter, parser::Parser};
 
@@ -23,32 +24,18 @@ pub fn run_file(path: String) {
         Ok(file) => file,
     };
 
-    let reader = BufReader::new(file);
+    let mut code = String::new();
+    match file.read_to_string(&mut code) {
+        Err(e) => panic!("Error reading file {}\n{}", path, e),
+        Ok(_) => (),
+    }
 
     let mut i = Interpreter::new(false);
 
-    /*    let mut code = String::new();
-        match file.(&mut code) {
-            Err(e) => panic!("Error reading file {}\n{}", path, e),
-            Ok(_) => (),
-        }
-
-
-        let mut i = Interpreter::new(false);
-
-        run(&code, &mut i);
-    */
-    for line in reader.lines() {
-        match line {
-            Err(e) => panic!("Error reading file {}\n{}", path, e),
-            Ok(code) => {
-                match run(&code, &mut i) {
-                    Ok(t) => {}
-                    Err(e) => {
-                        std::process::exit(65);
-                    }
-                };
-            }
+    match run(&code, &mut i) {
+        Ok(t) => {}
+        Err(e) => {
+            return;
         }
     }
 }
@@ -75,7 +62,7 @@ pub fn run_prompt() -> io::Result<()> {
     Ok(())
 }
 
-fn run(code: &str, interpreter: &mut Interpreter) -> Result<bool, ()> {
+fn run(code: &str, interpreter: &mut Interpreter) -> ResultMSG<()> {
     let mut scanner = Scanner::new(code.to_string());
     let tokens = scanner.scan_tokens();
 
@@ -83,7 +70,18 @@ fn run(code: &str, interpreter: &mut Interpreter) -> Result<bool, ()> {
         println!("{:?}", token);
     }
 
-    let mut parser = Parser::new(tokens);
+    for res in scanner.statements() {
+        match res {
+            Err(e) => {
+                writeln!(&mut stderr(), "{}", e);
+                break;
+            }
+            Ok(stmt) => interpreter.interpret(&stmt)?,
+        }
+    }
+
+    /*
+     * let mut parser = Parser::new(tokens);
     let stmt = parser.parse();
 
     println!("{:#?}", stmt);
@@ -94,7 +92,8 @@ fn run(code: &str, interpreter: &mut Interpreter) -> Result<bool, ()> {
         println!("{:?}", out);
     }
 
-    return Ok(true);
+    */
+    return Ok(());
 }
 
 #[cfg(test)]

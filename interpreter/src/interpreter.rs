@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{ops::Deref, rc::Rc};
 
 use crate::{
     env::Env,
@@ -229,6 +229,11 @@ impl StmtVisitor<ResultMSG<()>> for Interpreter {
             Stmt::Expression(ref e) => self.visit_expression_stmt(e),
             Stmt::Block(ref ss) => self.visit_block_stmt(ss),
             Stmt::Declaration(ref n, ref e) => self.visit_declaration_stmt(n, e.as_ref()),
+            Stmt::If(ref c, ref t, ref e) => {
+                self.visit_if(c, t.as_ref(), e.as_ref().map(|x| x.deref()))
+            }
+            Stmt::While(ref e, ref b) => self.visit_while(e, b.deref()),
+            Stmt::Break(l) => self.visit_break(l),
         }
     }
 
@@ -257,6 +262,41 @@ impl StmtVisitor<ResultMSG<()>> for Interpreter {
             stmt.accept(&mut scope)?;
         }
         Ok(())
+    }
+
+    fn visit_if(
+        &mut self,
+        expr: &Expr,
+        then_stmt: &Stmt,
+        else_stmt: Option<&Stmt>,
+    ) -> ResultMSG<()> {
+        let cond = expr.accept(self)?;
+
+        if cond.is_truthy() {
+            return then_stmt.accept(self);
+        }
+
+        if else_stmt.is_none() {
+            Ok(())
+        } else {
+            else_stmt.unwrap().deref().accept(self)
+        }
+    }
+
+    fn visit_while(&mut self, expr: &Expr, body: &Stmt) -> ResultMSG<()> {
+        while self.evaluate(expr)?.is_truthy() {
+            match body.accept(self) {
+                Err(Error::Break(_)) => break,
+                Err(e) => return Err(e),
+                Ok(_) => (),
+            };
+        }
+
+        Ok(())
+    }
+
+    fn visit_break(&mut self, line: u32) -> ResultMSG<()> {
+        Err(Error::Break(line))
     }
 }
 

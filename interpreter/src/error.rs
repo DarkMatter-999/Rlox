@@ -7,6 +7,7 @@ pub type ResultMSG<T> = Result<T, Error>;
 pub enum Error {
     Parser(u32, String, String),
     Runtime(u32, String, String),
+    Break(u32),
 }
 
 impl fmt::Display for Error {
@@ -22,6 +23,11 @@ impl fmt::Display for Error {
                 "Runtime Error at [line: {}] {} : near {} ",
                 line, msg, &near
             ),
+            Error::Break(ref line) => write!(
+                f,
+                "Runtime Error [line {}] unexpected break statement",
+                line
+            ),
         }
     }
 }
@@ -31,6 +37,7 @@ impl error::Error for Error {
         match *self {
             Error::Parser(_, _, _) => "parse error",
             Error::Runtime(_, _, _) => "runtime error",
+            Error::Break(_) => "break error",
         }
     }
 

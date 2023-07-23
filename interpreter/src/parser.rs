@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, ResultMSG},
-    expr::{Boxed, Expr},
+    expr::{self, Boxed, Expr},
     stmt::Stmt,
     token::{self, Token, TokenType, *},
 };
@@ -248,6 +248,10 @@ impl Parser {
             TokenType::PRINT,
             TokenType::VAR,
             TokenType::LEFT_BRACE,
+            TokenType::IF,
+            TokenType::WHILE,
+            TokenType::FOR,
+            TokenType::BREAK,
         ]);
 
         let mut n: Option<ResultMSG<Token>> = None;
@@ -267,11 +271,11 @@ impl Parser {
             TokenType::PRINT => self.print_statement(),
             TokenType::VAR => self.declaration_statement(),
             TokenType::LEFT_BRACE => self.block_statement(),
-            _ => Err(Error::Parser(
-                self.peek().line,
-                "Unexpected Token".to_string(),
-                format!("{:?}", token),
-            )),
+            TokenType::IF => self.if_statement(),
+            TokenType::WHILE => self.while_statement(),
+            TokenType::FOR => self.for_statement(),
+            TokenType::BREAK => self.break_statement(),
+            _ => unreachable!(),
         }
     }
 
@@ -307,7 +311,160 @@ impl Parser {
             stmts.push(self.statement()?);
         }
 
+        self.consume(TokenType::RIGHT_BRACE, "Expect '}' after block");
+
         Ok(Stmt::Block(stmts))
+    }
+
+    fn if_statement(&mut self) -> ResultMSG<Stmt> {
+        self.check_next(&[TokenType::LEFT_PAREN]);
+        let expr: Expr = self.expression()?;
+        self.check_next(&[TokenType::RIGHT_PAREN]);
+
+        let then_stmt: Box<Stmt> = self.statement()?.boxed();
+
+        match self.check_next(&[TokenType::ELSE]) {
+            Some(Err(e)) => Err(e),
+            Some(Ok(_)) => Ok(Stmt::If(expr, then_stmt, Some(self.statement()?.boxed()))),
+            None => Ok(Stmt::If(expr, then_stmt, None)),
+        }
+    }
+
+    fn while_statement(&mut self) -> ResultMSG<Stmt> {
+        let expr: Expr = self.expression()?;
+        let body: Box<Stmt> = self.statement()?.boxed();
+        Ok(Stmt::While(expr, body))
+    }
+    fn for_statement(&mut self) -> ResultMSG<Stmt> {
+        self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
+
+        let init: Option<Stmt> = match self.match_tok(vec![TokenType::SEMICOLON, TokenType::VAR]) {
+            true => match self.previous().token_type {
+                TokenType::SEMICOLON => None,
+                TokenType::VAR => {
+                    let dec = self.declaration_statement()?;
+                    self.consume(
+                        TokenType::SEMICOLON,
+                        "Expect ';' after loop initialization.",
+                    );
+
+                    Some(dec)
+                }
+                _ => {
+                    unreachable!()
+                }
+            },
+            _ => Some(self.expr_statement()?),
+        };
+
+        let cond: Expr = match self.match_tok(vec![TokenType::SEMICOLON]) {
+            true => Expr::Literal(Token {
+                token_type: TokenType::TRUE,
+                lexeme: "".to_string(),
+                literal: Literal::True,
+                line: self.peek().line,
+            }),
+
+            false => {
+                let expr = self.expression()?;
+                self.consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
+                expr
+            }
+        };
+
+        let inc: Option<Stmt> = match self.match_tok(vec![TokenType::RIGHT_PAREN]) {
+            true => None,
+            false => {
+                let expr = self.expr_statement()?;
+
+                self.consume(TokenType::RIGHT_PAREN, "Expect ')' after loop.");
+                Some(expr)
+            }
+        };
+
+        let mut body: Stmt = self.statement()?;
+
+        if inc.is_some() {
+            body = Stmt::Block(vec![body, inc.unwrap()]);
+        }
+
+        body = Stmt::While(cond, body.boxed());
+
+        if init.is_some() {
+            body = Stmt::Block(vec![init.unwrap(), body])
+        }
+
+        Ok(body)
+    }
+
+    fn for_statement1(&mut self) -> ResultMSG<Stmt> {
+        self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
+
+        let init: Option<Stmt> = match self.check_next(&[TokenType::SEMICOLON, TokenType::VAR]) {
+            None => Some(self.expr_statement()?),
+            Some(t) => match t?.token_type {
+                TokenType::VAR => Some(self.declaration_statement()?),
+                TokenType::SEMICOLON => None,
+                _ => unreachable!(),
+            },
+        };
+
+        println!("{:?}", self.peek());
+        println!("{:?}", self.peek());
+        self.advance();
+        println!("{:?}", self.peek());
+
+        let cond: Expr = match self.check_next(&[TokenType::SEMICOLON]) {
+            None => {
+                let expr = self.expression()?;
+                self.consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
+                expr
+            }
+            Some(t) => {
+                println!("{:?}", t);
+                match t?.token_type {
+                    TokenType::SEMICOLON => Expr::Literal(Token {
+                        token_type: TokenType::TRUE,
+                        lexeme: "".to_string(),
+                        literal: Literal::True,
+                        line: self.peek().line,
+                    }),
+                    e => unreachable!("{:?}", e),
+                }
+            }
+        };
+
+        let inc: Option<Stmt> = match self.check_next(&[TokenType::RIGHT_PAREN]) {
+            None => Some(self.expr_statement()?),
+            Some(t) => {
+                t?;
+                None
+            }
+        };
+
+        let mut body: Stmt = self.statement()?;
+
+        if inc.is_some() {
+            body = Stmt::Block(vec![body, inc.unwrap()]);
+        }
+
+        body = Stmt::While(cond, body.boxed());
+
+        if init.is_some() {
+            body = Stmt::Block(vec![init.unwrap(), body])
+        }
+
+        Ok(body)
+    }
+
+    fn break_statement(&mut self) -> ResultMSG<Stmt> {
+        match self.check_next(&[TokenType::SEMICOLON]) {
+            Some(token) => match token {
+                Ok(t) => Ok(Stmt::Break(t.line)),
+                Err(e) => Err(e),
+            },
+            None => unreachable!(),
+        }
     }
 }
 
@@ -315,7 +472,7 @@ impl Iterator for Parser {
     type Item = ResultMSG<Stmt>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.check_next(&[TokenType::EOF]).is_some() {
+        if self.is_at_end() {
             return None;
         }
 
