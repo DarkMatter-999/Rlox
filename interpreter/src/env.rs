@@ -18,6 +18,20 @@ impl Env {
         })
     }
 
+    pub fn with_parent(parent: Rc<Env>) -> Rc<Env> {
+        Rc::new(Env {
+            vals: RefCell::new(HashMap::new()),
+            parent: Some(parent),
+        })
+    }
+
+    pub fn with_globals(env: Rc<Env>) -> Rc<Env> {
+        match env.parent {
+            None => Env::with_parent(env.clone()),
+            Some(ref e) => Env::with_globals(e.clone()),
+        }
+    }
+
     pub fn define(&self, name: &str, val: Object) -> ResultMSG<()> {
         let mut vals = self.vals.borrow_mut();
 

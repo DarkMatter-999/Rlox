@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, fmt};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub enum TokenType {
@@ -119,6 +119,28 @@ impl PartialOrd<Self> for Literal {
             (&Literal::True, Literal::False) => true.partial_cmp(&false),
             (&Literal::False, Literal::True) => false.partial_cmp(&true),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:?} {} {:?}",
+            self.token_type, self.lexeme, self.literal
+        )
+    }
+}
+
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Literal::None => write!(f, "nil"),
+            Literal::True => write!(f, "true"),
+            Literal::False => write!(f, "false"),
+            Literal::Number(n) => write!(f, "{}", n),
+            Literal::StringLit(ref s) => write!(f, "{}", s),
         }
     }
 }

@@ -1,6 +1,7 @@
+use std::rc::Rc;
+
 use crate::expr::{Boxed, Expr};
 
-#[derive(Debug)]
 pub enum Stmt {
     Empty,
     Break(u32),
@@ -10,6 +11,8 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
+    Function(String, Vec<String>, Rc<Stmt>),
+    Return(u64, Expr),
 }
 
 impl Stmt {
@@ -34,6 +37,10 @@ pub trait Visitor<T> {
     fn visit_while(&mut self, expr: &Expr, body: &Stmt) -> T;
 
     fn visit_break(&mut self, line: u32) -> T;
+
+    fn visit_function(&mut self, name: String, params: &[String], body: Rc<Stmt>) -> T;
+
+    fn visit_return(&mut self, line: u64, expr: &Expr) -> T;
 }
 
 impl Boxed<Stmt> for Stmt {

@@ -11,6 +11,7 @@ use crate::{interpreter::Interpreter, parser::Parser};
 mod env;
 mod error;
 mod expr;
+mod function;
 mod interpreter;
 mod object;
 mod parser;

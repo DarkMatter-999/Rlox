@@ -32,6 +32,8 @@ fn fill_keywords(keywords: &mut HashMap<&str, TokenType>) {
     keywords.insert("var", VAR);
     keywords.insert("while", WHILE);
     keywords.insert("break", BREAK);
+    keywords.insert("fun", FUN);
+    keywords.insert("return", RETURN);
 }
 
 impl Scanner {
@@ -41,7 +43,7 @@ impl Scanner {
         fill_keywords(&mut keywords);
 
         Scanner {
-            source: source,
+            source,
             tokens: Vec::new(),
             start: 0,
             current: 0,
@@ -143,7 +145,7 @@ impl Scanner {
     fn add_token(&mut self, token: TokenType) {
         self.tokens.push(Token {
             token_type: token,
-            lexeme: "".to_string(),
+            lexeme: format!("{:?}", token),
             literal: None,
             line: self.line,
         });

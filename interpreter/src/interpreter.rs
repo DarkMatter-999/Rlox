@@ -4,13 +4,14 @@ use crate::{
     env::Env,
     error::{Error, ResultMSG},
     expr::{Expr, Visitor as ExprVisitor},
+    function::LoxFunction,
     object::Object,
     stmt::{Stmt, Visitor as StmtVisitor},
     token::{Literal, Token, TokenType},
 };
 
 pub struct Interpreter {
-    env: Rc<Env>,
+    pub env: Rc<Env>,
     repl: bool,
 }
 
@@ -22,13 +23,17 @@ impl Interpreter {
         }
     }
 
+    pub fn with_env(env: Rc<Env>) -> Self {
+        Interpreter { env, repl: false }
+    }
+
     pub fn interpret(&mut self, s: &Stmt) -> ResultMSG<()> {
         s.accept(self)
     }
 
     fn scoped(&self) -> Self {
         Interpreter {
-            env: Env::new(Some(self.env.clone())),
+            env: Env::with_parent(self.env.clone()),
             repl: self.repl,
         }
     }
@@ -47,6 +52,7 @@ impl ExprVisitor<ResultMSG<Object>> for Interpreter {
             Expr::Literal(ref lit) => self.visit_literal(expr, lit),
             Expr::Grouping(ref inside) => self.visit_grouping(expr, inside),
             Expr::Assignment(ref id, ref rhs) => self.visit_assignment(expr, id, rhs),
+            Expr::Call(ref expr, ref parent, ref body) => self.visit_call(expr, parent, body),
         }
     }
 
@@ -219,6 +225,37 @@ impl ExprVisitor<ResultMSG<Object>> for Interpreter {
         let val = self.evaluate(rhs)?;
         self.env.assign(&n, val).map(|lit| lit.clone())
     }
+    fn visit_call(&mut self, expr: &Expr, paren: &Token, params: &[Expr]) -> ResultMSG<Object> {
+        let callee = match self.evaluate(expr)? {
+            Object::Func(c) => c,
+            x => {
+                return self.err_near(
+                    "can only call functions and classes",
+                    paren,
+                    format!("{:?}", x),
+                )
+            }
+        };
+
+        if callee.arity() != params.len() {
+            return self.err_near(
+                &format!(
+                    "expected {} arguments but got {}",
+                    callee.arity(),
+                    params.len()
+                ),
+                paren,
+                "".to_string(),
+            );
+        }
+
+        let mut args: Vec<Object> = Vec::with_capacity(params.len());
+        for param in params {
+            args.push(self.evaluate(param)?);
+        }
+
+        callee.call(self, &args)
+    }
 }
 
 impl StmtVisitor<ResultMSG<()>> for Interpreter {
@@ -234,6 +271,8 @@ impl StmtVisitor<ResultMSG<()>> for Interpreter {
             }
             Stmt::While(ref e, ref b) => self.visit_while(e, b.deref()),
             Stmt::Break(l) => self.visit_break(l),
+            Stmt::Return(l, ref e) => self.visit_return(l, e),
+            Stmt::Function(ref n, ref p, ref b) => self.visit_function(n.to_owned(), p, b.clone()),
         }
     }
 
@@ -297,6 +336,18 @@ impl StmtVisitor<ResultMSG<()>> for Interpreter {
 
     fn visit_break(&mut self, line: u32) -> ResultMSG<()> {
         Err(Error::Break(line))
+    }
+
+    fn visit_function(&mut self, name: String, params: &[String], body: Rc<Stmt>) -> ResultMSG<()> {
+        self.env.define(
+            &name,
+            Object::Func(LoxFunction::new(self.env.clone(), params, body)),
+        )
+    }
+
+    fn visit_return(&mut self, line: u64, expr: &Expr) -> ResultMSG<()> {
+        let res: Object = self.evaluate(expr)?;
+        Err(Error::Return(line, res))
     }
 }
 

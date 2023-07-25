@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     error::{Error, ResultMSG},
     expr::{self, Boxed, Expr},
@@ -105,7 +107,48 @@ impl Parser {
             return Ok(expr);
         }
 
-        return self.primary();
+        return self.call();
+    }
+
+    fn call(&mut self) -> ResultMSG<Expr> {
+        let mut expr = self.primary()?;
+
+        loop {
+            expr = match self.match_tok(vec![TokenType::LEFT_PAREN]) {
+                true => self.finish_call(expr)?,
+                _ => break,
+            };
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ResultMSG<Expr> {
+        let mut args: Vec<Expr> = Vec::new();
+        if !self.check(TokenType::RIGHT_PAREN) {
+            loop {
+                if args.len() >= 255 {
+                    return Err(Error::Parser(
+                        0,
+                        "cannot have more than 255 arguments".to_string(),
+                        "".to_string(),
+                    ));
+                }
+
+                args.push(self.expression()?);
+
+                if !self.match_tok(vec![TokenType::COMMA]) {
+                    break;
+                }
+            }
+            self.current -= 1;
+        }
+
+        Ok(Expr::Call(
+            callee.boxed(),
+            self.consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments."),
+            args,
+        ))
     }
 
     fn primary(&mut self) -> ResultMSG<Expr> {
@@ -127,10 +170,11 @@ impl Parser {
             self.consume(TokenType::RIGHT_PAREN, "Expect ')' after expression");
             return Ok(Expr::Grouping(Box::new(expr)));
         }
+
         return Err(Error::Parser(
             self.peek().line,
             "Unexpected Token".to_string(),
-            format!("{:?}", self.peek()),
+            self.peek().lexeme,
         ));
     }
 
@@ -252,6 +296,8 @@ impl Parser {
             TokenType::WHILE,
             TokenType::FOR,
             TokenType::BREAK,
+            TokenType::FUN,
+            TokenType::RETURN,
         ]);
 
         let mut n: Option<ResultMSG<Token>> = None;
@@ -275,6 +321,8 @@ impl Parser {
             TokenType::WHILE => self.while_statement(),
             TokenType::FOR => self.for_statement(),
             TokenType::BREAK => self.break_statement(),
+            TokenType::FUN => self.function_statement(),
+            TokenType::RETURN => self.return_statement(),
             _ => unreachable!(),
         }
     }
@@ -397,66 +445,6 @@ impl Parser {
         Ok(body)
     }
 
-    fn for_statement1(&mut self) -> ResultMSG<Stmt> {
-        self.consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
-
-        let init: Option<Stmt> = match self.check_next(&[TokenType::SEMICOLON, TokenType::VAR]) {
-            None => Some(self.expr_statement()?),
-            Some(t) => match t?.token_type {
-                TokenType::VAR => Some(self.declaration_statement()?),
-                TokenType::SEMICOLON => None,
-                _ => unreachable!(),
-            },
-        };
-
-        println!("{:?}", self.peek());
-        println!("{:?}", self.peek());
-        self.advance();
-        println!("{:?}", self.peek());
-
-        let cond: Expr = match self.check_next(&[TokenType::SEMICOLON]) {
-            None => {
-                let expr = self.expression()?;
-                self.consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
-                expr
-            }
-            Some(t) => {
-                println!("{:?}", t);
-                match t?.token_type {
-                    TokenType::SEMICOLON => Expr::Literal(Token {
-                        token_type: TokenType::TRUE,
-                        lexeme: "".to_string(),
-                        literal: Literal::True,
-                        line: self.peek().line,
-                    }),
-                    e => unreachable!("{:?}", e),
-                }
-            }
-        };
-
-        let inc: Option<Stmt> = match self.check_next(&[TokenType::RIGHT_PAREN]) {
-            None => Some(self.expr_statement()?),
-            Some(t) => {
-                t?;
-                None
-            }
-        };
-
-        let mut body: Stmt = self.statement()?;
-
-        if inc.is_some() {
-            body = Stmt::Block(vec![body, inc.unwrap()]);
-        }
-
-        body = Stmt::While(cond, body.boxed());
-
-        if init.is_some() {
-            body = Stmt::Block(vec![init.unwrap(), body])
-        }
-
-        Ok(body)
-    }
-
     fn break_statement(&mut self) -> ResultMSG<Stmt> {
         match self.check_next(&[TokenType::SEMICOLON]) {
             Some(token) => match token {
@@ -465,6 +453,71 @@ impl Parser {
             },
             None => unreachable!(),
         }
+    }
+
+    fn function_statement(&mut self) -> ResultMSG<Stmt> {
+        let name: Token = self.consume(
+            TokenType::IDENTIFIER,
+            &format!("Expect {} name. ", self.peek().lexeme),
+        );
+        self.consume(
+            TokenType::LEFT_PAREN,
+            &format!("Expect '(' after {} name.", self.peek().lexeme),
+        );
+
+        let mut params: Vec<String> = Vec::new();
+
+        if !self.check(TokenType::RIGHT_PAREN) {
+            loop {
+                if params.len() >= 8 {
+                    return Err(Error::Parser(
+                        name.line,
+                        "cannot have more than 8 arguments".to_string(),
+                        name.lexeme,
+                    ));
+                }
+
+                params.push(
+                    self.consume(TokenType::IDENTIFIER, "Expect parameter name.")
+                        .lexeme,
+                );
+
+                if self.check_next(&[TokenType::COMMA]).is_none() {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RIGHT_PAREN, "Expect ')' after parameters.");
+        self.consume(
+            TokenType::LEFT_BRACE,
+            &format!("Expect '{{' before {} body", self.peek().lexeme),
+        );
+
+        Ok(Stmt::Function(
+            name.lexeme,
+            params,
+            Rc::new(self.block_statement()?),
+        ))
+    }
+
+    fn return_statement(&mut self) -> ResultMSG<Stmt> {
+        let ln: u64 = self.peek().line as u64;
+
+        let expr: Expr = if self.check(TokenType::SEMICOLON) {
+            Expr::Literal(Token {
+                token_type: TokenType::NIL,
+                lexeme: "nil".to_string(),
+                literal: Literal::None,
+                line: self.peek().line,
+            })
+        } else {
+            self.expression()?
+        };
+
+        self.consume(TokenType::SEMICOLON, "Expect ';' after return value.");
+
+        Ok(Stmt::Return(ln, expr))
     }
 }
 

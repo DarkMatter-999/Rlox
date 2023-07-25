@@ -1,6 +1,8 @@
 use core::fmt;
 use std::error;
 
+use crate::object::Object;
+
 pub type ResultMSG<T> = Result<T, Error>;
 
 #[derive(Debug)]
@@ -8,6 +10,7 @@ pub enum Error {
     Parser(u32, String, String),
     Runtime(u32, String, String),
     Break(u32),
+    Return(u64, Object),
 }
 
 impl fmt::Display for Error {
@@ -28,6 +31,11 @@ impl fmt::Display for Error {
                 "Runtime Error [line {}] unexpected break statement",
                 line
             ),
+            Error::Return(ref line, _) => write!(
+                f,
+                "Runtime Error [line {}] unexpected return statement",
+                line
+            ),
         }
     }
 }
@@ -38,6 +46,7 @@ impl error::Error for Error {
             Error::Parser(_, _, _) => "parse error",
             Error::Runtime(_, _, _) => "runtime error",
             Error::Break(_) => "break error",
+            Error::Return(_, _) => "return error",
         }
     }
 
